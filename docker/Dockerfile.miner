@@ -1,0 +1,21 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    gdal-bin libgdal-dev gcc g++ git curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml setup.py ./
+COPY irrigation/ irrigation/
+COPY miner/ miner/
+COPY neurons/ neurons/
+
+RUN pip install --no-cache-dir -e .
+
+COPY .env.example .env
+
+ENV PYTHONUNBUFFERED=1
+ENV MODEL_PATH=/app/model/weights.pt
+
+ENTRYPOINT ["python", "neurons/miner.py"]

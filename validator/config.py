@@ -1,38 +1,61 @@
+"""
+validator/config.py
+Validator-specific configuration helpers.
+
+All values are read from environment variables (loaded via python-dotenv).
+Call get_validator_config() to receive a validated dict.
+"""
+from __future__ import annotations
+
 import os
-from datetime import timedelta
-from pathlib import Path
+from typing import Any, Dict
 
-from dotenv import load_dotenv
+from loguru import logger
 
-validator_dir = Path(__file__).parent
-load_dotenv(validator_dir / ".env")
+from irrigation.constants import (
+    DEFAULT_GRID_RESOLUTION_M,
+    CHALLENGE_MAX_AGE_S,
+    CANARY_INJECTION_RATE,
+    SYNTHETIC_SPOTCHECK_RATE,
+)
 
-# Network
-NETUID = int(os.getenv("NETUID", "1"))
-SUBTENSOR_NETWORK = os.getenv("SUBTENSOR_NETWORK", "test")
-SUBTENSOR_ADDRESS = os.getenv("SUBTENSOR_ADDRESS", "127.0.0.1:9944")
 
-# Wallet
-WALLET_NAME = os.getenv("WALLET_NAME", "default")
-HOTKEY_NAME = os.getenv("HOTKEY_NAME", "default")
+def get_validator_config() -> Dict[str, Any]:
+    """
+    Build and return the validator configuration from environment variables.
 
-# Miner selection
-MIN_MINERS = 1
-MAX_MINERS = 60
-MIN_STAKE_THRESHOLD = float(os.getenv("MIN_STAKE_THRESHOLD", "2"))
+    Returns:
+        Dict of validated configuration values.
+    """
+    config: Dict[str, Any] = {
+        # Wallet
+        "wallet_name":   os.environ.get("WALLET_NAME",   "default"),
+        "wallet_hotkey": os.environ.get("WALLET_HOTKEY", "default"),
+        # Bittensor network
+        "subtensor_network": os.environ.get("SUBTENSOR_NETWORK", "finney"),
+        "netuid":            int(os.environ.get("NETUID", "1")),
+        # Challenge parameters
+        "grid_resolution_m":     int(
+            os.environ.get("GRID_RESOLUTION_M", str(DEFAULT_GRID_RESOLUTION_M))
+        ),
+        "max_response_timeout_s": float(
+            os.environ.get("MAX_RESPONSE_TIMEOUT_S", str(CHALLENGE_MAX_AGE_S))
+        ),
+        # Canary / synthetic
+        "canary_injection_rate":    CANARY_INJECTION_RATE,
+        "synthetic_spotcheck_rate": SYNTHETIC_SPOTCHECK_RATE,
+        "canary_rotation_hours":    int(os.environ.get("CANARY_ROTATION_HOURS", "24")),
+        "synthetic_benchmark_path": os.environ.get("SYNTHETIC_BENCHMARK_PATH", ""),
+        # Reproducibility
+        "docker_rerun_enabled": (
+            os.environ.get("DOCKER_RERUN_ENABLED", "false").lower() == "true"
+        ),
+    }
 
-# Timing
-CHALLENGE_INTERVAL = timedelta(minutes=int(os.getenv("CHALLENGE_INTERVAL_MINUTES", "12")))
-CHALLENGE_TIMEOUT = timedelta(seconds=90)
-WEIGHTS_INTERVAL = timedelta(minutes=30)
-VALIDATION_DELAY = timedelta(minutes=5)
-
-# Scoring
-SCORE_THRESHOLD = 0.10          # quality floor
-VERSION_KEY = int(os.getenv("VERSION_KEY", "1000"))
-
-# Paths
-DB_PATH = Path(os.getenv("DB_PATH", "validator.db"))
-
-# Logging
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+    logger.info(
+        f"Validator config loaded | netuid={config['netuid']} "
+        f"network={config['subtensor_network']} "
+        f"timeout={config['max_response_timeout_s']}s "
+        f"docker_rerun={config['docker_rerun_enabled']}"
+    )
+    return config

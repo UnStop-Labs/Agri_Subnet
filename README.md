@@ -1,313 +1,534 @@
-# AgriScore — Field Irrigation Intelligence Network
+<div align="center">
 
-A **Bittensor subnet** that crowdsources geospatial soil-moisture analysis of agricultural fields using multi-spectral satellite imagery (Sentinel-2 / SAR).  
-Miners compete to produce the most accurate irrigation predictions; validators score them using a deterministic, multi-pillar evaluation engine and submit weights to the Bittensor chain.
+# 🌾 Field Irrigation Intelligence Network
+### Bittensor Subnet · Precision Agriculture · Sentinel-2 Satellite Analysis
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Bittensor](https://img.shields.io/badge/bittensor-%E2%89%A56.9.0-orange.svg)](https://bittensor.com)
+[![Tests](https://img.shields.io/badge/tests-79%20passed-brightgreen.svg)](#running-tests)
+
+</div>
+
+---
+
+## Overview
+
+The **Field Irrigation Intelligence Network** is a decentralised intelligence subnet on the [Bittensor](https://bittensor.com) network that delivers precision irrigation recommendations for agricultural fields in real time.
+
+**Miners** fetch live Sentinel-2 L2A satellite imagery from the free [Copernicus Data Space](https://dataspace.copernicus.eu), compute NDVI and NDWI spectral indices, and return georeferenced GeoJSON moisture maps at 10–60 m grid resolution — signed with their Bittensor hotkey for cryptographic accountability.
+
+**Validators** issue challenge requests with random nonces (preventing pre-computation), verify responses through a five-dimensional scoring framework, run four anti-cheat subsystems, and set on-chain weights proportional to spatial accuracy, spectral validity, data freshness, reproducibility, and response latency.
+
+The subnet is purpose-built for smallholder farms in Thailand and Southeast Asia (field sizes measured in Rai), with canary fields at permanent water bodies, arid zones, dense forest, and urban surfaces providing a continuous, ground-truth-anchored quality signal.
+
+---
+
+## Table of Contents
+
+- [Architecture](#architecture)
+- [Protocol Flow](#protocol-flow)
+- [Quick Start](#quick-start)
+- [Environment Variables](#environment-variables)
+- [Scoring System](#scoring-system)
+- [Anti-Cheat Mechanisms](#anti-cheat-mechanisms)
+- [Moisture Classification](#moisture-classification)
+- [GeoJSON Output Format](#geojson-output-format)
+- [Running Tests](#running-tests)
+- [Docker](#docker)
+- [Project Structure](#project-structure)
+- [Phase 2 Gaps](#phase-2-gaps)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
 ## Architecture
 
 ```
-Validator ──challenge──► Miners (N)
-    ▲                        │
-    │   scored responses ◄───┘
-    │
-    └──► Bittensor weights (TAO rewards)
+┌─────────────────────────────────────────────────────────────────┐
+│                        BITTENSOR NETWORK                        │
+│                                                                 │
+│  ┌─────────────────────┐          ┌──────────────────────────┐  │
+│  │      VALIDATOR       │          │         MINER            │  │
+│  │                     │          │                          │  │
+│  │  ChallengeIssuer    │◄────────►│  IrrigationMiner         │  │
+│  │  ├─ nonce (256-bit) │          │  ├─ validate challenge   │  │
+│  │  ├─ canary inject   │          │  ├─ fetch Sentinel-2     │  │
+│  │  └─ broadcast       │          │  ├─ compute NDVI/NDWI    │  │
+│  │                     │          │  ├─ build GeoJSON grid   │  │
+│  │  MinerScorer        │          │  └─ sign response        │  │
+│  │  ├─ spatial  35%    │          │                          │  │
+│  │  ├─ spectral 20%    │          │  CopernicusClient        │  │
+│  │  ├─ temporal 20%    │          │  ├─ OAuth2 token         │  │
+│  │  ├─ repro    15%    │          │  ├─ OData scene search   │  │
+│  │  └─ latency  10%    │          │  └─ GeoTIFF download     │  │
+│  │                     │          │                          │  │
+│  │  Anti-Cheat Suite   │          │  Spectral Processing     │  │
+│  │  ├─ nonce timing    │          │  ├─ NDVI (B04/B08)       │  │
+│  │  ├─ scene audit     │          │  ├─ NDWI (B03/B08)       │  │
+│  │  ├─ plagiarism      │          │  └─ moisture grid        │  │
+│  │  └─ Docker rerun    │          │                          │  │
+│  └─────────────────────┘          └──────────────────────────┘  │
+│                │                                                │
+│                └──── subtensor.set_weights() ───────────────────┘
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-| Component | Role |
-|---|---|
-| **Validator** | Generates challenges, holds synthetic ground truth, runs the scoring engine, sets on-chain weights |
-| **Miner** | Fetches Sentinel-2 imagery via Planetary Computer STAC, runs soil-moisture model, returns a GeoJSON grid |
-| **Bittensor** | Distributes TAO rewards proportional to validator-assigned weights |
+| Component | File | Role |
+|-----------|------|------|
+| Challenge synapse | [`irrigation/synapse.py`](irrigation/synapse.py) | `FieldAnalysisChallenge` — validator→miner request with nonce |
+| Response synapse | [`irrigation/synapse.py`](irrigation/synapse.py) | `FieldAnalysisResponse` — miner→validator GeoJSON + audit trail |
+| Constants | [`irrigation/constants.py`](irrigation/constants.py) | All scoring weights, thresholds, and magic numbers |
+| Geo utilities | [`irrigation/utils/geo.py`](irrigation/utils/geo.py) | BBox, grid cells, moisture classification |
+| Copernicus client | [`miner/satellite/copernicus.py`](miner/satellite/copernicus.py) | OAuth2, OData search, streaming GeoTIFF download |
+| NDVI/NDWI | [`miner/processing/`](miner/processing/) | Band extraction + moisture index computation |
+| Grid builder | [`miner/processing/grid_builder.py`](miner/processing/grid_builder.py) | Assemble the per-cell GeoJSON FeatureCollection |
+| Miner neuron | [`miner/miner.py`](miner/miner.py) | Full 5-step pipeline |
+| Challenge issuer | [`validator/challenge.py`](validator/challenge.py) | Nonce generation, canary injection, broadcast |
+| Scorer | [`validator/scorer.py`](validator/scorer.py) | 5-dimension scoring + EMA + weight normalisation |
+| Anti-cheat | [`validator/anticheats/`](validator/anticheats/) | Nonce timing, scene audit, plagiarism, Docker rerun |
+| Benchmarks | [`validator/benchmarks/`](validator/benchmarks/) | Canary fields + synthetic ground truth |
+| Validator neuron | [`validator/validator.py`](validator/validator.py) | Tempo loop: issue → collect → check → score → set_weights |
 
 ---
 
-## Moisture Classes
+## Protocol Flow
 
-| Class | Soil moisture | Farmer action |
-|---|---|---|
-| `CRITICAL_DRY` 🔴 | < 20 % field capacity | Irrigate within 24 h |
-| `DRY` 🟠 | 20–40 % | Irrigate within 2–3 days |
-| `OPTIMAL` 🟢 | 40–70 % | Monitor |
-| `WET` 🔵 | > 70 % | No irrigation needed |
+```
+Validator                                      Miner
+    │                                            │
+    │  1. Create challenge                        │
+    │     challenge_id = uuid4()                 │
+    │     nonce        = secrets.token_hex(32)   │
+    │     timestamp    = now()                   │
+    │     [12% chance: inject canary field]      │
+    │                                            │
+    │──── FieldAnalysisChallenge ───────────────►│
+    │     lat, lon, area_rai, query_date         │
+    │     nonce, timestamp_utc                   │
+    │                                            │
+    │                    2. Validate challenge   │
+    │                       age ≤ 90 s           │
+    │                       nonce ≥ 32 bytes     │
+    │                                            │
+    │                    3. Fetch Sentinel-2     │
+    │                       Copernicus OData API │
+    │                       ±14-day window       │
+    │                       cloud < 20%          │
+    │                                            │
+    │                    4. Compute NDVI/NDWI    │
+    │                       B04/B08 / B03/B08    │
+    │                                            │
+    │                    5. Build GeoJSON grid   │
+    │                       n×n cells @ res_m    │
+    │                       moisture_class       │
+    │                       confidence per cell  │
+    │                                            │
+    │                    6. Sign response        │
+    │                       sign(id+nonce+hash)  │
+    │                                            │
+    │◄─── FieldAnalysisResponse ────────────────│
+    │     geojson_grid, scene_ids               │
+    │     model_hash, docker_image_ref          │
+    │     signature                             │
+    │                                            │
+    │  7. Anti-cheat pass                        │
+    │     nonce_timing, scene_audit             │
+    │     plagiarism, [docker_rerun]            │
+    │                                            │
+    │  8. Score (5 dimensions)                  │
+    │     EMA update                            │
+    │                                            │
+    │  9. set_weights() on-chain                │
+```
 
 ---
 
-## Scoring System (v2)
+## Quick Start
 
-The scoring engine is inspired by the [TurboVision subnet 44](https://github.com/score-technologies/turbovision) architecture — same **METRIC\_REGISTRY** pattern, same **baseline gating**, same **tiebreak logic** — adapted from sports video intelligence to agricultural satellite intelligence.
+### Prerequisites
 
-### Pipeline
+- Python ≥ 3.10
+- A registered [Bittensor wallet](https://docs.bittensor.com/getting-started/wallets)
+- Free [Copernicus Data Space](https://dataspace.copernicus.eu) account
+- Docker (optional — for reproducibility verification)
 
-```
-Miner Response
-      │
-      ▼
-[1] Processing-Rate Gate   (hard gate: 2 s – 90 s window)
-      │
-      ▼
-[2] Synthetic GT Generation  (SHA-256 seed from nonce + lat/lon + date)
-      │
-      ▼
-[3] Six Pillar Metrics  (weighted mean → acc)
-      │
-      ▼
-[4] Baseline Gate  (acc ≤ θ=0.30 → score = 0)
-      │
-      ▼
-[5] Plagiarism Penalty  (cosine similarity > 0.99 → score × 0.20)
-      │
-      ▼
-[6] Bittensor Weight  +  Anti-Copy Tiebreak
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/UnStop-Labs/Agri_Subnet.git
+cd Agri_Subnet
+
+# Install (editable, includes dev dependencies)
+pip install -e ".[dev]"
+
+# Configure environment
+cp .env.example .env
+nano .env   # fill in your credentials
 ```
 
-### Scoring Pillars
+### Run a Miner
 
-| Pillar | Weight | Method | Score = 0 when |
-|---|---|---|---|
-| **Moisture Class F1** | 35 % | Hungarian cell-matching + AUC-F1 at two strictness levels (strict + lenient ordinal) | All class predictions wrong |
-| **Moisture Index MAE** | 20 % | Mean absolute error of numeric `moisture_index`, normalised at 0.35 | MAE ≥ 0.35 |
-| **Spectral Validity** | 15 % | Physics-bound checks on NDVI, NDWI, moisture\_index + cross-band consistency | All cells out-of-range |
-| **False Alarm Rate** | 15 % | Spurious WET/OPTIMAL predictions on GT-DRY cells, per km² | ≥ 3 false alarms / km² |
-| **Temporal Consistency** | 10 % | Scene freshness (±14 days), moisture change-rate plausibility, trend direction alignment | All checks fail |
-| **Confidence Calibration** | 5 % | Expected Calibration Error (ECE) over 10 confidence bins | Confidence > 85 % but accuracy < 45 % |
+```bash
+# Ensure .env is filled in, then:
+python neurons/miner.py
 
-#### Baseline gating
-
-Any miner scoring at or below the baseline threshold earns **zero rewards** — preventing lazy submissions from collecting TAO.
-
-```
-acc ≤ θ   →  score = 0.0
-acc > θ   →  score = (acc − θ) / (1 − θ)     # re-mapped to (0, 1]
+# Or with explicit flags (override .env):
+python neurons/miner.py \
+  --wallet.name my_wallet \
+  --wallet.hotkey my_hotkey \
+  --subtensor.network finney \
+  --netuid 1
 ```
 
-`θ = 0.30` for `IRRIGATION_DETECTION` (a naive "always OPTIMAL" model scores ~0.28).
+### Run a Validator
 
-#### Processing-rate gate
+```bash
+python neurons/validator.py
+```
 
-Mirrors TurboVision's RTF (Real-Time Factor) gate — responses outside the acceptable latency window score zero:
+### Docker (recommended for production)
 
-| Processing time | Outcome |
-|---|---|
-| < 2 s | **Blocked** — below satellite-API round-trip (pre-computed) |
-| 2 – 90 s | **Pass** |
-| > 90 s | **Blocked** — timeout |
-
-#### Anti-copy tiebreak
-
-Two independent mechanisms stop model copying:
-
-1. **Cosine similarity** — if two miners' `moisture_index` vectors have similarity > 0.99, both are capped at 20 % of their score.  
-2. **Commit-block tiebreak** — when responses are near-identical (mean absolute difference < 0.03), the miner with the **earlier on-chain commit block** wins, making copying economically pointless.
+```bash
+cd docker
+docker-compose up --build
+```
 
 ---
 
-## Synthetic Ground Truth
+## Environment Variables
 
-Instead of relying on cross-miner consensus (gameable by colluding miners), every challenge carries a **deterministic ground truth** the validator controls:
+Copy [`.env.example`](.env.example) → `.env` and fill in the values below.
 
-```python
-seed  = SHA256(nonce + latitude + longitude + date)
-ndvi  = seasonal_baseline(lat, day_of_year) + deterministic_noise(seed, cell_id)
-mi    = moisture_baseline(lat, day_of_year) + deterministic_noise(seed, cell_id)
-class = moisture_class_from_index(mi)
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `WALLET_NAME` | `str` | `default` | Bittensor wallet name |
+| `WALLET_HOTKEY` | `str` | `default` | Wallet hotkey name |
+| `SUBTENSOR_NETWORK` | `str` | `finney` | `finney` \| `test` \| `local` |
+| `NETUID` | `int` | `1` | Subnet UID on the Bittensor network |
+| `COPERNICUS_USER` | `str` | *(required)* | Copernicus Data Space email — [register free](https://dataspace.copernicus.eu) |
+| `COPERNICUS_PASS` | `str` | *(required)* | Copernicus Data Space password |
+| `MODEL_PATH` | `path` | `model/weights.pt` | Path to miner model weights file |
+| `MODEL_VERSION` | `str` | `v1.1.0` | Model version tag (embedded in responses) |
+| `DOCKER_IMAGE_REF` | `str` | `ghcr.io/yourorg/irrigation-miner:v1.1.0` | Docker image reference for reproducibility verification |
+| `GRID_RESOLUTION_M` | `int` | `20` | Output grid cell size in metres: `10`\|`20`\|`30`\|`60` |
+| `SYNTHETIC_BENCHMARK_PATH` | `path` | *(optional)* | JSON file with synthetic benchmark dataset |
+| `CANARY_ROTATION_HOURS` | `int` | `24` | How often canary field definitions rotate |
+| `MAX_RESPONSE_TIMEOUT_S` | `float` | `90` | Seconds to wait for miner responses per challenge |
+| `DOCKER_RERUN_ENABLED` | `bool` | `true` | Enable Docker container reproducibility re-runs |
+| `LOG_LEVEL` | `str` | `INFO` | Loguru log level: `DEBUG`\|`INFO`\|`WARNING`\|`ERROR` |
+
+---
+
+## Scoring System
+
+Each miner response is scored across **five independent dimensions** and aggregated with an Exponential Moving Average (EMA).
+
+### Dimension Breakdown
+
+| # | Dimension | Weight | Method |
+|---|-----------|--------|--------|
+| 1 | **Spatial** | **35%** | Moisture class accuracy vs. canary/synthetic ground truth *or* cross-miner consensus when no ground truth is available |
+| 2 | **Spectral** | **20%** | Physics-bound NDVI ∈ [-1,1] and NDWI ∈ [-1,1] range validation; cloud fraction penalty above 30% |
+| 3 | **Temporal** | **20%** | Scene acquisition date vs. challenge `query_date`; full score ≤14 days, linear decay to 60% at 30 days, zero beyond |
+| 4 | **Reproducibility** | **15%** | Docker container re-run output match (50%) + determinism (30%) + environment artifact validity (20%) |
+| 5 | **Latency** | **10%** | Response time: <2 s → 0.0 (flagged), 2–8 s → 1.0, 8–30 s → 0.7, 30–90 s → 0.4, >90 s → 0.0 |
+
+### EMA Aggregation
+
+```
+EMA_t = α × score_t + (1 − α) × EMA_{t-1}
+α = 0.3,  window = 20 epochs
 ```
 
-Two validators seeding with the same nonce produce **identical GT** — enabling multi-validator cross-checking without coordination.
+Miners below the **quality floor** (0.10) receive zero on-chain weight regardless of their EMA.
+
+### Weight Normalisation
+
+```
+weight_i = final_score_i / Σ final_score_j
+```
+
+Weights are corrected to sum to **exactly 1.000000** before `subtensor.set_weights()`.
 
 ---
 
 ## Anti-Cheat Mechanisms
 
-| Mechanism | Guards against |
-|---|---|
-| **Nonce** (256-bit random per challenge) | Pre-computation of answers |
-| **Processing-rate gate** (< 2 s blocked) | Sub-API-round-trip responses |
-| **Scene ID audit** | Using stale or fabricated satellite scenes |
-| **Canary fields** (~12 % of challenges) | Models that ignore actual satellite data |
-| **Cosine similarity** (> 0.99 capped) | Copy-pasting another miner's answer |
-| **Commit-block tiebreak** | Copying another miner's model weights |
+### 1. Nonce Timing (§6.1)
+
+Every challenge embeds a fresh 256-bit random nonce unknown until broadcast. Responses arriving in less than **2 seconds** cannot have made a live Copernicus API call — they are flagged for spectral and reproducibility auditing and receive a **latency score of 0.0**.
+
+### 2. Scene ID Auditability (§6.2)
+
+Miners must report the exact Sentinel-2 scene IDs used. Validators query the Copernicus STAC catalog to verify:
+- The scene actually exists in the ESA archive
+- Its bounding box covers the challenged lat/lon
+- Its acquisition date falls within the query window
+
+Scenes failing verification reduce the temporal score proportionally.
+
+### 3. Canary Fields (§6.3)
+
+**12% of challenges** are silently replaced with permanent landmark fields whose expected moisture class is deterministic:
+
+| Canary | Location | Expected Class |
+|--------|----------|---------------|
+| Bhumibol Reservoir | 17.2456°N 99.0234°E | `WET` |
+| Mae Wong arid scrubland | 15.8012°N 99.6543°E | `CRITICAL_DRY` |
+| Doi Inthanon dense forest | 18.5893°N 98.4862°E | `OPTIMAL` |
+| Bangkok urban impervious | 13.7563°N 100.5018°E | `CRITICAL_DRY` |
+
+Miners that return incorrect classes on canary challenges are penalised in the spatial dimension.
+
+### 4. Plagiarism & Sybil Detection (§6.5)
+
+After collecting all responses for a challenge, validators compute pairwise **cosine similarity** on the flattened `moisture_index` vectors. Pairs exceeding the threshold (0.99) are flagged as a Sybil cluster. The entire cluster's combined weight is **capped to what a single honest miner would receive**, shared equally among members.
+
+```
+flagged if: cos(moisture_vec_A, moisture_vec_B) > 0.99
+penalty:    each cluster member's weight = max_cluster_score / cluster_size
+```
+
+### 5. Docker Reproducibility Verification (§5.6 / §6.4)
+
+Validators pull the miner's declared Docker image, re-run it with the original challenge inputs, and compare the output `moisture_index` values cell by cell (tolerance ±0.05). A match score of 1.0 (all cells within tolerance) yields full reproducibility credit. Determinism is inferred from the match score.
+
+---
+
+## Moisture Classification
+
+All output cells carry a `moisture_class` derived from the 0–1 `moisture_index`:
+
+| Class | Moisture Index Range | Agronomic Meaning |
+|-------|---------------------|-------------------|
+| `CRITICAL_DRY` | 0.00 – 0.20 | Severe water deficit — **irrigate immediately** |
+| `DRY` | 0.21 – 0.40 | Below optimal — irrigation recommended |
+| `OPTIMAL` | 0.41 – 0.70 | Good soil moisture balance |
+| `WET` | 0.71 – 1.00 | Saturated or flooded — no irrigation needed |
+
+The moisture index is a weighted blend:
+```
+moisture_index = 0.6 × ndvi_moisture + 0.4 × ndwi_moisture
+ndvi_moisture  = 1 − (NDVI + 1) / 2     # low NDVI → high need
+ndwi_moisture  = 1 − (NDWI + 1) / 2     # low NDWI → high need
+```
+
+---
+
+## GeoJSON Output Format
+
+Each miner response contains a `geojson_grid` — a standard **GeoJSON FeatureCollection** where every Feature represents one grid cell:
+
+```json
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[100.130, 14.470], [100.131, 14.470],
+                          [100.131, 14.471], [100.130, 14.471],
+                          [100.130, 14.470]]]
+      },
+      "properties": {
+        "cell_id":               0,
+        "moisture_class":        "OPTIMAL",
+        "moisture_index":        0.5231,
+        "ndvi":                  0.4120,
+        "ndwi":                  0.1850,
+        "evapotranspiration_mm": 4.2,
+        "cloud_masked":          false,
+        "data_source":           "Sentinel-2 L2A",
+        "cell_confidence":       0.873
+      }
+    }
+  ]
+}
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `cell_id` | `int` | Row-major cell index (unique within response) |
+| `moisture_class` | `str` | `CRITICAL_DRY` \| `DRY` \| `OPTIMAL` \| `WET` |
+| `moisture_index` | `float [0,1]` | Continuous soil moisture proxy |
+| `ndvi` | `float [-1,1]` | Normalized Difference Vegetation Index |
+| `ndwi` | `float [-1,1]` | Normalized Difference Water Index |
+| `evapotranspiration_mm` | `float` | Estimated ET (mm/day); ERA5 in Phase 2 |
+| `cloud_masked` | `bool` | True if this cell was obscured by cloud |
+| `data_source` | `str` | Satellite product identifier |
+| `cell_confidence` | `float [0,1]` | Agreement between NDVI and NDWI signals |
+
+---
+
+## Running Tests
+
+The full test suite runs **without a Bittensor wallet or network connection** — bittensor is mocked via [`tests/conftest.py`](tests/conftest.py).
+
+```bash
+# Run all 79 tests
+pytest tests/ -v
+
+# Run a specific module
+pytest tests/test_scorer.py -v
+
+# Run a single test
+pytest tests/test_anticheats.py::TestPlagiarismDetection::test_identical_responses_flagged -v
+```
+
+### Test Coverage
+
+| Module | Tests | Covers |
+|--------|-------|--------|
+| [`test_synapse.py`](tests/test_synapse.py) | 11 | Pydantic validators, serialisation, field access |
+| [`test_scorer.py`](tests/test_scorer.py) | 21 | All 5 scoring dimensions, EMA, quality floor, weight normalisation |
+| [`test_grid_builder.py`](tests/test_grid_builder.py) | 16 | Bbox maths, grid cell generation, moisture classification |
+| [`test_anticheats.py`](tests/test_anticheats.py) | 18 | Nonce timing, plagiarism, Sybil penalty, cosine similarity, grid comparison |
+
+---
+
+## Docker
+
+### Build & Run Both
+
+```bash
+cd docker
+docker-compose up --build
+```
+
+### Miner Only
+
+```bash
+docker-compose up --build miner
+```
+
+### Validator Only
+
+```bash
+docker-compose up --build validator
+```
+
+The **validator container** mounts `/var/run/docker.sock` so it can pull and re-run miner Docker images for reproducibility verification.
+
+The **miner container** expects model weights at `/app/model/weights.pt` (mount a volume or bake them into a custom image).
 
 ---
 
 ## Project Structure
 
 ```
-irrigation-subnet/
-├── slides.html                      ⭐ Interactive scoring system presentation
+Agri_Subnet/
+├── README.md                          # This file
+├── pyproject.toml                     # Build system + dependencies
+├── setup.py                           # pip install -e . support
+├── .env.example                       # Environment variable template
+├── .gitignore
 │
-├── miner/
-│   ├── main.py                      FastAPI application
-│   ├── endpoints/
-│   │   ├── irrigation.py            POST /irrigation/challenge
-│   │   └── availability.py          GET  /availability
+├── irrigation/                        # Core shared package
+│   ├── __init__.py
+│   ├── synapse.py                     # FieldAnalysisChallenge + FieldAnalysisResponse
+│   ├── protocol.py                    # Protocol version constants
+│   ├── constants.py                   # All magic numbers (weights, thresholds)
 │   └── utils/
-│       ├── satellite.py             Planetary Computer STAC fetch
-│       ├── ndvi.py                  NDVI / NDWI / NDMI computation
-│       └── geojson_builder.py       GeoJSON grid construction
+│       ├── geo.py                     # BoundingBox, grid builder, classify_moisture
+│       ├── signing.py                 # Nonce, SHA-256, sign/verify
+│       └── logging.py                 # Loguru setup
 │
-└── validator/
-    ├── main.py
-    ├── config.py
-    ├── challenge/
-    │   ├── challenge_types.py        FieldAnalysisChallenge / Response / ScoringResult
-    │   ├── challenge_process.py      Challenge sender loop
-    │   └── send_challenge.py         Per-miner send via fiber
-    ├── db/
-    │   ├── schema.py
-    │   └── operations.py
-    └── evaluation/
-        ├── synthetic_gt.py           ⭐ Deterministic ground-truth generator
-        ├── scoring_v2.py             ⭐ Main scoring pipeline (v2)
-        ├── metrics/
-        │   ├── registry.py           ⭐ METRIC_REGISTRY + ElementConfig
-        │   ├── moisture.py           ⭐ Moisture Class F1 + MAE (Hungarian matching)
-        │   ├── spectral.py           ⭐ Spectral validity + False alarm rate
-        │   ├── temporal.py           ⭐ Temporal consistency
-        │   └── calibration.py        ⭐ ECE confidence calibration
-        ├── calculate_score.py        Legacy v1 scorer (plagiarism detection)
-        ├── canary_fields.py          Known-answer calibration locations (Thai agriculture)
-        ├── evaluation.py             IrrigationValidator
-        ├── evaluation_loop.py        Async evaluation loop
-        └── set_weights.py            On-chain weight setter
-```
-
-`⭐` = files added / significantly upgraded in v2
-
----
-
-## Quick Start
-
-```bash
-# 1. Clone and configure
-git clone https://github.com/UnStop-Labs/scoring.git
-cd scoring
-cp env.example .env          # edit NETUID, wallet names, etc.
-
-# 2. Install miner dependencies
-pip install -e ".[miner]"
-
-# 3. Run miner
-uvicorn miner.main:app --host 0.0.0.0 --port 8001
-
-# 4. Install validator dependencies (separate venv recommended)
-pip install -e ".[validator]"
-
-# 5. Run validator
-python -m validator.main
-```
-
-### Docker
-
-```bash
-docker compose up --build
+├── miner/                             # Miner neuron
+│   ├── miner.py                       # IrrigationMiner — main 5-step pipeline
+│   ├── config.py                      # Environment-driven config
+│   ├── satellite/
+│   │   ├── copernicus.py              # Sentinel-2 retrieval (Copernicus Data Space)
+│   │   └── landsat.py                 # Landsat-8/9 fallback — Phase 2 stub
+│   └── processing/
+│       ├── ndvi.py                    # NDVI computation (B04/B08)
+│       ├── ndwi.py                    # NDWI computation (B03/B08)
+│       └── grid_builder.py            # GeoJSON FeatureCollection assembly
+│
+├── validator/                         # Validator neuron
+│   ├── validator.py                   # IrrigationValidator — tempo loop
+│   ├── challenge.py                   # ChallengeIssuer (nonce + canary injection)
+│   ├── scorer.py                      # MinerScorer — 5 dimensions + EMA
+│   ├── config.py                      # Environment-driven config
+│   ├── anticheats/
+│   │   ├── nonce_checker.py           # §6.1 timing check
+│   │   ├── scene_auditor.py           # §6.2 STAC catalog verification
+│   │   ├── plagiarism.py              # §6.5 cosine similarity + Sybil penalty
+│   │   └── docker_runner.py           # §5.6/§6.4 container reproducibility
+│   └── benchmarks/
+│       ├── canary_fields.py           # 4 permanent landmark canary fields
+│       └── synthetic.py               # Synthetic benchmark loader
+│
+├── neurons/                           # Entry points
+│   ├── miner.py                       # python neurons/miner.py
+│   └── validator.py                   # python neurons/validator.py
+│
+├── docker/
+│   ├── Dockerfile.miner
+│   ├── Dockerfile.validator
+│   └── docker-compose.yml
+│
+└── tests/
+    ├── conftest.py                    # Bittensor mock (no wallet needed)
+    ├── test_synapse.py
+    ├── test_scorer.py
+    ├── test_grid_builder.py
+    ├── test_anticheats.py
+    └── fixtures/
+        ├── sample_challenge.json
+        └── sample_response.json
 ```
 
 ---
 
-## Writing a Miner
+## Phase 2 Gaps
 
-Your miner must expose `POST /irrigation/challenge` and return a GeoJSON `FeatureCollection`.  
-Each feature's `properties` must include:
+The following features are intentionally stubbed for Phase 2. Each stub raises `NotImplementedError` with detailed implementation instructions.
 
-| Field | Type | Description |
-|---|---|---|
-| `cell_id` | int | Grid cell index (matches challenge grid) |
-| `moisture_class` | str | One of `CRITICAL_DRY`, `DRY`, `OPTIMAL`, `WET` |
-| `moisture_index` | float | Soil moisture in [0, 1] |
-| `ndvi` | float | Normalised Difference Vegetation Index in [-1, 1] |
-| `ndwi` | float | Normalised Difference Water Index in [-1, 1] |
-| `cloud_masked` | bool | True if cell is obscured by cloud |
-| `cell_confidence` | float | Per-cell confidence in [0, 1] *(optional but rewarded)* |
-
-### Satellite data
-
-Miners fetch **Sentinel-2 L2A imagery** (10 m resolution) via the  
-[Microsoft Planetary Computer](https://planetarycomputer.microsoft.com/) STAC API — no API key required.  
-Landsat-9 is used as fallback. Development mode falls back to deterministic synthetic data seeded from field coordinates.
+| Gap | Location | What's Needed |
+|-----|----------|---------------|
+| **ERA5 evapotranspiration** | `miner/processing/grid_builder.py` | ERA5 CDSAPI integration for Penman-Monteith ET per cell |
+| **On-chain hotkey verification** | `miner/miner.py::_validate_challenge` | Verify `validator_hotkey` against subnet metagraph before processing |
+| **Phase 1 qualification gate** | `validator/validator.py::_filter_to_qualified_miners` | State machine: UNQUALIFIED → QUALIFYING → QUALIFIED → BANNED |
+| **Landsat-8/9 fallback** | `miner/satellite/landsat.py` | USGS M2M API for cloud-heavy periods |
+| **Farm job queue** | `validator/validator.py::_get_next_farm_location` | Replace hardcoded lat/lon with a real API or database queue |
+| **Confidence calibration (ECE)** | `validator/scorer.py::track_calibration_error` | Expected Calibration Error bucketing and per-miner penalty |
+| **Async Docker re-run** | `validator/anticheats/docker_runner.py::_async_rerun_worker` | Non-blocking reproducibility check via asyncio + ThreadPoolExecutor |
 
 ---
 
-## Scoring API (v2)
+## Roadmap
 
-```python
-from validator.evaluation.scoring_v2 import score_response, score_responses_v2
-from validator.evaluation.metrics import IRRIGATION_DETECTION_ELEMENT
-
-# Score a single response
-result = score_response(
-    challenge = my_challenge,
-    response  = miner_response,
-    element   = IRRIGATION_DETECTION_ELEMENT,
-)
-
-print(result.summary())
-# acc=0.82  score=0.74  rate_pass=True  plagiarism=False
-#   moisture_class_f1      0.85  (w=0.35)
-#   moisture_index_mae     0.78  (w=0.20)
-#   spectral_validity      0.94  (w=0.15)
-#   false_alarm_rate       0.91  (w=0.15)
-#   temporal_consistency   0.60  (w=0.10)
-#   confidence_calibration 0.72  (w=0.05)
-
-# Score all responses for one challenge (batch + plagiarism detection)
-results = score_responses_v2(
-    challenge = my_challenge,
-    responses = [resp_a, resp_b, resp_c],
-)
-```
-
-### Adding a new metric
-
-```python
-# Add to any file in validator/evaluation/metrics/
-from validator.evaluation.metrics.registry import register_metric, ElementType, PillarName
-
-@register_metric((ElementType.IRRIGATION_DETECTION, PillarName.MY_NEW_PILLAR))
-def compute_my_metric(gt_cells, pred_cells, **kwargs) -> float:
-    # Return a float in [0, 1]
-    ...
-```
-
-No changes to the scoring engine required — the registry picks it up automatically on import.
+| Phase | Milestone | Status |
+|-------|-----------|--------|
+| **Phase 1** | Sentinel-2 NDVI/NDWI grid · 5-dimension scoring · 4 anti-cheat mechanisms · 79 unit tests | ✅ **Complete** |
+| **Phase 2** | ERA5 ET · on-chain hotkey verification · Landsat fallback | 🔄 Stubbed |
+| **Phase 3** | Farm job queue API · per-farm history and personalised recommendations | 📋 Planned |
+| **Phase 4** | Phase 1 qualification gate · confidence calibration (ECE) | 📋 Planned |
+| **Phase 5** | Async Docker reproducibility re-runs · non-blocking tempo | 📋 Planned |
+| **Phase 6** | Multi-season historical analysis · crop-type-specific NDVI thresholds | 📋 Planned |
+| **Phase 7** | Mobile farmer interface · SMS/LINE irrigation alerts | 📋 Planned |
 
 ---
 
-## Slides
+## Contributing
 
-An interactive 18-slide presentation of the full scoring system is at [`slides.html`](slides.html).  
-Open in any browser and navigate with **← →** arrow keys or click.
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/your-feature`
+3. Install dev dependencies: `pip install -e ".[dev]"`
+4. Run tests before committing: `pytest tests/ -v`
+5. Submit a pull request with a clear description
 
----
-
-## Canary Fields
-
-~12 % of challenges use known reference locations the validator can score independently, without needing a miner reference:
-
-| Location | Expected class | Purpose |
-|---|---|---|
-| Bhumibol Dam reservoir | `WET` | Permanent water body |
-| Doi Inthanon forest | `OPTIMAL` | Dense tropical canopy |
-| Mae Hong Son dryland | `DRY` | Arid northern zone |
-| Bangkok city centre | `DRY` | Urban impervious surface |
-
----
-
-## v1 → v2 Migration
-
-| Concern | v1 | v2 |
-|---|---|---|
-| Ground truth | Cross-miner majority vote | Deterministic synthetic GT |
-| Spatial accuracy | % agreement with peer miners | Hungarian-matched AUC-F1 vs GT |
-| Architecture | Hardcoded 5-score function | METRIC\_REGISTRY — pluggable pillars |
-| Minimum quality bar | None | Baseline gate θ = 0.30 |
-| Latency | Soft bands (0.7 / 0.4 / 0.0) | Hard gate [2 s, 90 s] |
-| Anti-copy | Cosine similarity cap | Cosine sim + commit-block tiebreak |
-| Backwards compatible | — | ✓ v1 miners still work |
+Please keep **all magic numbers in [`irrigation/constants.py`](irrigation/constants.py)**, use **absolute imports**, and write **loguru** log statements (no `print()`).
 
 ---
 
 ## License
 
-MIT
+MIT © 2024 [UnStop Labs](https://github.com/UnStop-Labs)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software.

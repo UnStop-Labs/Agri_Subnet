@@ -1,0 +1,388 @@
+{
+  "challenge_id": "fixture-challenge-id",
+  "miner_hotkey": "5Miner0000000000000000000000000000000000000000",
+  "geojson_grid": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                100.13,
+                14.47
+              ],
+              [
+                100.131,
+                14.47
+              ],
+              [
+                100.131,
+                14.471
+              ],
+              [
+                100.13,
+                14.471
+              ],
+              [
+                100.13,
+                14.47
+              ]
+            ]
+          ]
+        },
+        "properties": {
+          "cell_id": 0,
+          "moisture_class": "OPTIMAL",
+          "moisture_index": 0.5,
+          "ndvi": 0.4,
+          "ndwi": 0.2,
+          "evapotranspiration_mm": 3.2,
+          "cloud_masked": false,
+          "data_source": "Sentinel-2 L2A",
+          "cell_confidence": 0.87
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                100.13,
+                14.47
+              ],
+              [
+                100.131,
+                14.47
+              ],
+              [
+                100.131,
+                14.471
+              ],
+              [
+                100.13,
+                14.471
+              ],
+              [
+                100.13,
+                14.47
+              ]
+            ]
+          ]
+        },
+        "properties": {
+          "cell_id": 1,
+          "moisture_class": "OPTIMAL",
+          "moisture_index": 0.51,
+          "ndvi": 0.4,
+          "ndwi": 0.2,
+          "evapotranspiration_mm": 3.2,
+          "cloud_masked": false,
+          "data_source": "Sentinel-2 L2A",
+          "cell_confidence": 0.87
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                100.13,
+                14.47
+              ],
+              [
+                100.131,
+                14.47
+              ],
+              [
+                100.131,
+                14.471
+              ],
+              [
+                100.13,
+                14.471
+              ],
+              [
+                100.13,
+                14.47
+              ]
+            ]
+          ]
+        },
+        "properties": {
+          "cell_id": 2,
+          "moisture_class": "OPTIMAL",
+          "moisture_index": 0.52,
+          "ndvi": 0.4,
+          "ndwi": 0.2,
+          "evapotranspiration_mm": 3.2,
+          "cloud_masked": false,
+          "data_source": "Sentinel-2 L2A",
+          "cell_confidence": 0.87
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                100.13,
+                14.47
+              ],
+              [
+                100.131,
+                14.47
+              ],
+              [
+                100.131,
+                14.471
+              ],
+              [
+                100.13,
+                14.471
+              ],
+              [
+                100.13,
+                14.47
+              ]
+            ]
+          ]
+        },
+        "properties": {
+          "cell_id": 3,
+          "moisture_class": "OPTIMAL",
+          "moisture_index": 0.53,
+          "ndvi": 0.4,
+          "ndwi": 0.2,
+          "evapotranspiration_mm": 3.2,
+          "cloud_masked": false,
+          "data_source": "Sentinel-2 L2A",
+          "cell_confidence": 0.87
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                100.13,
+                14.47
+              ],
+              [
+                100.131,
+                14.47
+              ],
+              [
+                100.131,
+                14.471
+              ],
+              [
+                100.13,
+                14.471
+              ],
+              [
+                100.13,
+                14.47
+              ]
+            ]
+          ]
+        },
+        "properties": {
+          "cell_id": 4,
+          "moisture_class": "OPTIMAL",
+          "moisture_index": 0.54,
+          "ndvi": 0.4,
+          "ndwi": 0.2,
+          "evapotranspiration_mm": 3.2,
+          "cloud_masked": false,
+          "data_source": "Sentinel-2 L2A",
+          "cell_confidence": 0.87
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                100.13,
+                14.47
+              ],
+              [
+                100.131,
+                14.47
+              ],
+              [
+                100.131,
+                14.471
+              ],
+              [
+                100.13,
+                14.471
+              ],
+              [
+                100.13,
+                14.47
+              ]
+            ]
+          ]
+        },
+        "properties": {
+          "cell_id": 5,
+          "moisture_class": "OPTIMAL",
+          "moisture_index": 0.55,
+          "ndvi": 0.4,
+          "ndwi": 0.2,
+          "evapotranspiration_mm": 3.2,
+          "cloud_masked": false,
+          "data_source": "Sentinel-2 L2A",
+          "cell_confidence": 0.87
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                100.13,
+                14.47
+              ],
+              [
+                100.131,
+                14.47
+              ],
+              [
+                100.131,
+                14.471
+              ],
+              [
+                100.13,
+                14.471
+              ],
+              [
+                100.13,
+                14.47
+              ]
+            ]
+          ]
+        },
+        "properties": {
+          "cell_id": 6,
+          "moisture_class": "OPTIMAL",
+          "moisture_index": 0.56,
+          "ndvi": 0.4,
+          "ndwi": 0.2,
+          "evapotranspiration_mm": 3.2,
+          "cloud_masked": false,
+          "data_source": "Sentinel-2 L2A",
+          "cell_confidence": 0.87
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                100.13,
+                14.47
+              ],
+              [
+                100.131,
+                14.47
+              ],
+              [
+                100.131,
+                14.471
+              ],
+              [
+                100.13,
+                14.471
+              ],
+              [
+                100.13,
+                14.47
+              ]
+            ]
+          ]
+        },
+        "properties": {
+          "cell_id": 7,
+          "moisture_class": "OPTIMAL",
+          "moisture_index": 0.57,
+          "ndvi": 0.4,
+          "ndwi": 0.2,
+          "evapotranspiration_mm": 3.2,
+          "cloud_masked": false,
+          "data_source": "Sentinel-2 L2A",
+          "cell_confidence": 0.87
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                100.13,
+                14.47
+              ],
+              [
+                100.131,
+                14.47
+              ],
+              [
+                100.131,
+                14.471
+              ],
+              [
+                100.13,
+                14.471
+              ],
+              [
+                100.13,
+                14.47
+              ]
+            ]
+          ]
+        },
+        "properties": {
+          "cell_id": 8,
+          "moisture_class": "OPTIMAL",
+          "moisture_index": 0.58,
+          "ndvi": 0.4,
+          "ndwi": 0.2,
+          "evapotranspiration_mm": 3.2,
+          "cloud_masked": false,
+          "data_source": "Sentinel-2 L2A",
+          "cell_confidence": 0.87
+        }
+      }
+    ]
+  },
+  "processing_time_ms": 6200,
+  "satellite_scene_ids": [
+    "S2A_MSIL2A_20240315T030541_N0510_R075_T47PQT_20240315T070541"
+  ],
+  "model_version": "v1.1.0",
+  "model_hash": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+  "docker_image_ref": "ghcr.io/yourorg/irrigation-miner:v1.1.0",
+  "dependency_spec": "bittensor>=6.9.0\nrasterio>=1.3.9\nnumpy>=1.26.0",
+  "confidence_overall": 0.87,
+  "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

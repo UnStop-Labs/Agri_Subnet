@@ -1,8 +1,51 @@
+# Python
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
+*.egg
 *.egg-info/
-.env
-validator.db
 dist/
 build/
+.eggs/
 .venv/
+venv/
+env/
+.env
+
+# Secrets — never commit credentials
+*.env
+!.env.example
+
+# Model weights
+model/
+*.pt
+*.pth
+*.ckpt
+*.bin
+
+# Data / satellite cache
+data/
+*.tif
+*.geotiff
+*.nc
+
+# Bittensor wallets (keep out of repo)
+~/.bittensor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test artefacts
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# OS
+.DS_Store
+Thumbs.db
+__pycache__/

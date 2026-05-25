@@ -1,0 +1,12 @@
+{
+  "challenge_id": "7c3c0ebb-415a-448d-9aa9-2a84e0a6f003",
+  "validator_hotkey": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+  "latitude": 14.471,
+  "longitude": 100.131,
+  "area_rai": 25.0,
+  "query_date": "2024-03-15T06:00:00Z",
+  "grid_resolution_m": 20,
+  "crop_hint": "rice",
+  "nonce": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "timestamp_utc": 1779691636
+}

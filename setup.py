@@ -1,6 +1,5 @@
-from setuptools import setup, find_packages
+"""setup.py — exists so `pip install -e .` works from the repo root."""
+from setuptools import setup
 
-setup(
-    name="irrigation-subnet",
-    packages=find_packages(),
-)
+if __name__ == "__main__":
+    setup()

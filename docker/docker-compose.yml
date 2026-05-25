@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  miner:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.miner
+    env_file: ../.env
+    volumes:
+      - ~/.bittensor:/root/.bittensor
+      - ./model:/app/model
+    restart: unless-stopped
+
+  validator:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.validator
+    env_file: ../.env
+    volumes:
+      - ~/.bittensor:/root/.bittensor
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
