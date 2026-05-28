@@ -8,10 +8,10 @@ Spawns three long-running processes/tasks:
 """
 
 import asyncio
+import ipaddress
 import os
 import sys
 from multiprocessing import Process
-from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
@@ -20,6 +20,94 @@ from fiber.chain.chain_utils import load_coldkeypub_keypair, load_hotkey_keypair
 from fiber.chain.interface import get_substrate
 from fiber.chain.models import Node
 from loguru import logger
+
+# ---------------------------------------------------------------------------
+# Patch fiber's fetch_nodes to handle fresh subnets with empty trust arrays.
+#
+# On a brand new subnet, metagraph["trust"] is an empty tuple ().
+# fiber crashes with IndexError when it tries to read trust[uid].
+# We replace fiber's function with a safe version that falls back to the
+# runtime API and uses 0.0 for any missing values.
+# ---------------------------------------------------------------------------
+_original_get_nodes = fetch_nodes.get_nodes_for_netuid
+
+
+def _decode_account_id(raw) -> str:
+    """Convert a raw AccountId (bytes tuple from runtime API) to SS58 address."""
+    if isinstance(raw, str) and len(raw) > 10:
+        return raw
+    try:
+        inner = raw
+        if isinstance(inner, (list, tuple)) and len(inner) == 1 and isinstance(inner[0], (list, tuple)):
+            inner = inner[0]
+        if isinstance(inner, (list, tuple)):
+            from substrateinterface.utils.ss58 import ss58_encode
+            return ss58_encode(bytes(inner), ss58_format=42)
+    except Exception:
+        pass
+    return str(raw)
+
+
+def _safe_get_nodes_for_netuid(substrate, netuid, block=None):
+    try:
+        return _original_get_nodes(substrate=substrate, netuid=netuid, block=block)
+    except Exception as first_exc:
+        logger.warning(f"fiber get_nodes failed ({first_exc}) — trying runtime API fallback")
+
+        for api_fn in ["get_neurons_lite", "get_neurons"]:
+            try:
+                result = substrate.runtime_call("NeuronInfoRuntimeApi", api_fn, [netuid])
+                neurons = (result.value or []) if result else []
+                if not neurons:
+                    continue
+
+                nodes = []
+                for neuron in neurons:
+                    if not isinstance(neuron, dict):
+                        continue
+                    axon = neuron.get("axon_info") or {}
+                    total_stake = float(neuron.get("total_stake", 0))
+
+                    raw_ip = axon.get("ip", 0)
+                    try:
+                        ip_str = str(ipaddress.ip_address(int(raw_ip)))
+                    except Exception:
+                        ip_str = "0.0.0.1"
+
+                    nodes.append(Node(
+                        node_id=int(neuron.get("uid", 0)),
+                        netuid=netuid,
+                        hotkey=_decode_account_id(neuron.get("hotkey", "")),
+                        coldkey=_decode_account_id(neuron.get("coldkey", "")),
+                        stake=total_stake / 1e9,
+                        alpha_stake=total_stake / 1e9,
+                        tao_stake=0.0,
+                        trust=float(neuron.get("trust", 0)) / 65535.0,
+                        consensus=float(neuron.get("consensus", 0)) / 65535.0,
+                        incentive=float(neuron.get("incentive", 0)) / 65535.0,
+                        dividends=float(neuron.get("dividends", 0)) / 65535.0,
+                        emission=float(neuron.get("emission", 0)),
+                        vtrust=float(neuron.get("validator_trust", 0)) / 65535.0,
+                        rank=float(neuron.get("rank", 0)) / 65535.0,
+                        last_updated=int(neuron.get("last_update", 0)),
+                        ip=ip_str,
+                        port=int(axon.get("port", 0)),
+                        ip_type=int(axon.get("ip_type", 4)),
+                        protocol=int(axon.get("version", 0)),
+                    ))
+
+                logger.info(f"Runtime API fallback ({api_fn}) returned {len(nodes)} nodes")
+                return nodes
+            except Exception as api_exc:
+                logger.debug(f"Runtime API {api_fn} failed: {api_exc}")
+                continue
+
+        logger.error("All node fetch methods failed, returning empty list")
+        return []
+
+
+# Swap fiber's function with our safe version
+fetch_nodes.get_nodes_for_netuid = _safe_get_nodes_for_netuid
 
 from validator.challenge.challenge_process import start_challenge_sender
 from validator.config import (
@@ -133,7 +221,6 @@ async def main():
             iteration += 1
             logger.debug(f"Main loop iteration {iteration}")
 
-            # Restart any crashed background tasks
             if weights_task.done():
                 logger.warning("Restarting weights task")
                 weights_task = asyncio.create_task(weights_update_loop(db_manager))
@@ -163,3 +250,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         sys.exit(0)
+
