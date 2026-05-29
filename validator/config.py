@@ -29,7 +29,7 @@ VALIDATION_DELAY = timedelta(minutes=5)
 
 # Scoring
 SCORE_THRESHOLD = 0.10          # quality floor
-VERSION_KEY = int(os.getenv("VERSION_KEY", "1000"))
+VERSION_KEY = int(os.getenv("VERSION_KEY", "0"))
 
 # Paths
 DB_PATH = Path(os.getenv("DB_PATH", "validator.db"))
